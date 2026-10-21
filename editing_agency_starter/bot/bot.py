@@ -1,15 +1,22 @@
+import os
+import sys
+from dotenv import load_dotenv
+
+# Carrega o .env antes de importar qualquer modulo de banco
+_root_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+_dotenv_path = os.path.join(_root_dir, ".env")
+if os.path.exists(_dotenv_path):
+    load_dotenv(_dotenv_path)
+else:
+    load_dotenv()
+
+# Add parent dir to sys.path to import backend modules
+sys.path.append(_root_dir)
+from backend.database import SessionLocal, User, Job
+
 import discord
 from discord.ext import commands, tasks
 from discord.ui import Button, View
-import os
-from dotenv import load_dotenv
-import sys
-
-# Add parent dir to sys.path to import backend modules
-sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from backend.database import SessionLocal, User, Job
-
-load_dotenv()
 
 TOKEN = os.getenv('DISCORD_BOT_TOKEN')
 GUILD_ID = int(os.getenv('DISCORD_GUILD_ID', 0))
