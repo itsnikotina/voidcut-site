@@ -1,4 +1,4 @@
-const API_URL = '';
+let API_URL = '';
 const STORAGE='voidcut_demo_v1';
 const DEFAULT_PASSWORD='12b647ç8';
 
@@ -64,6 +64,9 @@ async function loadConfig(){
         document.querySelectorAll('[data-discord-link]').forEach(a => {
           a.href = cfg.discord_invite;
         });
+      }
+      if(cfg.api_url){
+        API_URL = cfg.api_url.replace(/\/$/, '');
       }
     }
   } catch(e) {
@@ -202,6 +205,7 @@ async function loadPortfolio(){
 
 async function initDashboard(){
   if(sessionStorage.getItem('voidcut_auth')!=='1'){location.href='index.html';return}
+  await loadConfig();
   const dateStr = new Date().toLocaleDateString('pt-BR', {day:'2-digit', month:'short', year:'numeric'}).toUpperCase();
   if($('#dashDate')) $('#dashDate').textContent = dateStr;
   $('#logoutBtn')?.addEventListener('click', ()=>{sessionStorage.removeItem('voidcut_auth');location.href='index.html'});
