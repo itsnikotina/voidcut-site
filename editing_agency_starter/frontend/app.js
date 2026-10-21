@@ -51,7 +51,24 @@ function initLanding(){
     mobileNav?.classList.remove('open');
     $('#menuBtn').textContent = '☰';
   }));
+  loadConfig();
   loadPortfolio();
+}
+
+async function loadConfig(){
+  try {
+    const res = await fetch('config.json');
+    if(res.ok){
+      const cfg = await res.json();
+      if(cfg.discord_invite){
+        document.querySelectorAll('[data-discord-link]').forEach(a => {
+          a.href = cfg.discord_invite;
+        });
+      }
+    }
+  } catch(e) {
+    // Mantém o link do HTML
+  }
 }
 
 function getClientInitials(name){
