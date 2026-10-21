@@ -1,8 +1,50 @@
 let API_URL = '';
+let SUPABASE_URL = '';
+let SUPABASE_KEY = '';
 const STORAGE='voidcut_demo_v1';
 const DEFAULT_PASSWORD='12b647ç8';
 
+async function supabaseRequest(endpoint, options = {}){
+  if(!SUPABASE_URL || !SUPABASE_KEY) return null;
+  const headers = {
+    'apikey': SUPABASE_KEY,
+    'Authorization': `Bearer ${SUPABASE_KEY}`,
+    'Content-Type': 'application/json',
+    'Prefer': 'return=representation',
+    ...(options.headers || {})
+  };
+  const res = await fetch(`${SUPABASE_URL}/rest/v1${endpoint}`, {
+    ...options,
+    headers
+  });
+  if(!res.ok){
+    const text = await res.text();
+    throw new Error(text || `Supabase error ${res.status}`);
+  }
+  return res.json();
+}
+
 async function getData(){
+  // 1. Supabase nativo em nuvem (Prioridade máxima para acesso direto na Vercel)
+  if(SUPABASE_URL && SUPABASE_KEY){
+    try {
+      const [projects, leads, editors] = await Promise.all([
+        supabaseRequest('/jobs?select=*,client:client_id(name),editor:editor_id(name)&order=id.desc'),
+        supabaseRequest('/users?role=eq.client&order=name.asc'),
+        supabaseRequest('/users?role=eq.editor&order=name.asc')
+      ]);
+      const normalizedProjects = (projects || []).map(p => ({
+        ...p,
+        client_name: p.client?.name || p.client_name || null,
+        editor_name: p.editor?.name || p.editor_name || null
+      }));
+      return { projects: normalizedProjects, leads: leads || [], editors: editors || [], notes: '' };
+    } catch (e) {
+      console.error('Supabase fetch failed, falling back to local API:', e);
+    }
+  }
+
+  // 2. Fallback para API FastAPI local
   try {
     const [jobsRes, clientsRes, editorsRes] = await Promise.all([
       fetch(`${API_URL}/jobs`),
@@ -67,6 +109,12 @@ async function loadConfig(){
       }
       if(cfg.api_url){
         API_URL = cfg.api_url.replace(/\/$/, '');
+      }
+      if(cfg.supabase_url){
+        SUPABASE_URL = cfg.supabase_url.replace(/\/$/, '');
+      }
+      if(cfg.supabase_key){
+        SUPABASE_KEY = cfg.supabase_key;
       }
     }
   } catch(e) {
@@ -313,11 +361,18 @@ function renderProjects(items, clientMap, editorMap){
     btn.onclick = async () => {
       const jobId = btn.dataset.approve;
       try {
-        await fetch(`${API_URL}/jobs/${jobId}/status`, {
-          method: 'PATCH',
-          headers: {'Content-Type': 'application/json'},
-          body: JSON.stringify({ status: 'Completed' })
-        });
+        if(SUPABASE_URL && SUPABASE_KEY){
+          await supabaseRequest(`/jobs?id=eq.${jobId}`, {
+            method: 'PATCH',
+            body: JSON.stringify({ status: 'Completed' })
+          });
+        } else {
+          await fetch(`${API_URL}/jobs/${jobId}/status`, {
+            method: 'PATCH',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({ status: 'Completed' })
+          });
+        }
         await renderDash();
       } catch(e) {
         alert('Erro ao atualizar status do projeto');
@@ -330,7 +385,11 @@ function renderProjects(items, clientMap, editorMap){
       const [, id] = btn.dataset.delete.split(':');
       if (confirm('Tem certeza que deseja excluir este projeto?')) {
         try {
-          await fetch(`${API_URL}/jobs/${id}`, { method: 'DELETE' });
+          if(SUPABASE_URL && SUPABASE_KEY){
+            await supabaseRequest(`/jobs?id=eq.${id}`, { method: 'DELETE' });
+          } else {
+            await fetch(`${API_URL}/jobs/${id}`, { method: 'DELETE' });
+          }
           await renderDash();
         } catch (e) {
           alert('Erro ao excluir projeto');
@@ -385,17 +444,30 @@ async function openForm(type){
   const d = await getData();
 
   if (type === 'project') {
-    let clientOpts = (d.leads || []).map(c => `<option value="${c.id}">${esc(c.name)}</option>`).join('');
-    if(!clientOpts) clientOpts = `<option value="">Nenhum cliente encontrado</option>`;
-    
-    let editorOpts = (d.editors || []).map(e => `<option value="${e.id}">${esc(e.name)}</option>`).join('');
-    if(!editorOpts) editorOpts = `<option value="">Nenhum editor encontrado</option>`;
+    const hasClients = (d.leads || []).length > 0;
+    const hasEditors = (d.editors || []).length > 0;
+
+    let clientFieldHtml = '';
+    if(hasClients){
+      const clientOpts = d.leads.map(c => `<option value="${c.id}">${esc(c.name)}</option>`).join('');
+      clientFieldHtml = `<div class="field"><label>Cliente *<select id="f2">${clientOpts}</select></label></div>`;
+    } else {
+      clientFieldHtml = `<div class="field"><label>Novo Cliente *<input id="f2_new" required placeholder="Nome do criador (ex: Trickywi)"></label></div>`;
+    }
+
+    let editorFieldHtml = '';
+    if(hasEditors){
+      const editorOpts = d.editors.map(e => `<option value="${e.id}">${esc(e.name)}</option>`).join('');
+      editorFieldHtml = `<div class="field"><label>Editor Responsável *<select id="f3">${editorOpts}</select></label></div>`;
+    } else {
+      editorFieldHtml = `<div class="field"><label>Editor Responsável *<input id="f3_new" required placeholder="Nome do editor (ex: John Doe)"></label></div>`;
+    }
 
     const html = `
       <div class="field"><label>Título do Projeto / Vídeo *<input id="f1" required placeholder="ex: Episódio 10 - Minecraft Hardcore"></label></div>
       <div class="form-grid-2">
-        <div class="field"><label>Cliente *<select id="f2">${clientOpts}</select></label></div>
-        <div class="field"><label>Editor Responsável *<select id="f3">${editorOpts}</select></label></div>
+        ${clientFieldHtml}
+        ${editorFieldHtml}
       </div>
       <div class="form-grid-2">
         <div class="field"><label>Tipo de Serviço<input id="f4" placeholder="ex: YouTube Long-form, Shorts, VFX"></label></div>
@@ -416,35 +488,77 @@ async function openForm(type){
   $('#modalSave').onclick = async () => {
     if(type === 'project') {
       const title = $('#f1').value.trim();
-      const clientId = parseInt($('#f2').value);
-      const editorId = parseInt($('#f3').value);
-
       if(!title) { alert('Informe o título do projeto.'); return; }
-      if(!clientId) { alert('Selecione um cliente.'); return; }
-      if(!editorId) { alert('Selecione um editor.'); return; }
+
+      let clientId = $('#f2') ? parseInt($('#f2').value) : null;
+      let editorId = $('#f3') ? parseInt($('#f3').value) : null;
+
+      // Se for novo cliente digitado manualmente:
+      if(!clientId && $('#f2_new')) {
+        const clientName = $('#f2_new').value.trim();
+        if(!clientName) { alert('Informe o nome do cliente.'); return; }
+        if(SUPABASE_URL && SUPABASE_KEY){
+          try {
+            const res = await supabaseRequest('/users', {
+              method: 'POST',
+              body: JSON.stringify({ name: clientName, role: 'client' })
+            });
+            if(res && res[0]) clientId = res[0].id;
+          } catch(e) {
+            console.error('Erro ao criar cliente:', e);
+          }
+        }
+      }
+
+      // Se for novo editor digitado manualmente:
+      if(!editorId && $('#f3_new')) {
+        const editorName = $('#f3_new').value.trim();
+        if(!editorName) { alert('Informe o nome do editor.'); return; }
+        if(SUPABASE_URL && SUPABASE_KEY){
+          try {
+            const res = await supabaseRequest('/users', {
+              method: 'POST',
+              body: JSON.stringify({ name: editorName, role: 'editor', specialties: 'Edição Geral' })
+            });
+            if(res && res[0]) editorId = res[0].id;
+          } catch(e) {
+            console.error('Erro ao criar editor:', e);
+          }
+        }
+      }
 
       const payload = {
         title: title,
-        client_id: clientId,
-        editor_id: editorId,
+        client_id: clientId || null,
+        editor_id: editorId || null,
         service: $('#f4').value || 'Edição',
         deadline: $('#f5').value || null,
         client_price: Number($('#f6').value || 0),
         editor_price: Number($('#f7').value || 0),
-        description: $('#f8').value || ''
+        description: $('#f8').value || '',
+        status: 'New',
+        access_token: Math.random().toString(36).substring(2, 10) + Math.random().toString(36).substring(2, 10)
       };
       
       try {
-        const res = await fetch(`${API_URL}/jobs/create_from_panel`, {
-          method: 'POST',
-          headers: {'Content-Type': 'application/json'},
-          body: JSON.stringify(payload)
-        });
-        if(!res.ok) throw new Error('Falha na resposta da API');
+        if(SUPABASE_URL && SUPABASE_KEY){
+          await supabaseRequest('/jobs', {
+            method: 'POST',
+            body: JSON.stringify(payload)
+          });
+        } else {
+          const res = await fetch(`${API_URL}/jobs/create_from_panel`, {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify(payload)
+          });
+          if(!res.ok) throw new Error('Falha na resposta da API');
+        }
         modal.classList.add('hidden');
         await renderDash();
       } catch(e) {
-        alert('Erro ao salvar projeto no backend.');
+        console.error(e);
+        alert('Erro ao salvar projeto.');
       }
     }
   };

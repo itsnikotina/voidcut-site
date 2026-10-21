@@ -1,4 +1,5 @@
 {
   "discord_invite": "https://discord.gg/PaMH397kRV",
-  "api_url": ""
+  "supabase_url": "https://thceapyxksoljuuouskx.supabase.co",
+  "supabase_key": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRoY2VhcHl4a3NvbGp1dW91c2t4Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTI1NDcyNTgsImV4cCI6MjEwODEyMzI1OH0.yJzS61J7VjVEe-WzitgvIeOMH5ILOnGyyVv7dSflcU8"
 }
