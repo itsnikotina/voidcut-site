@@ -29,7 +29,7 @@ async function getData(){
   if(SUPABASE_URL && SUPABASE_KEY){
     try {
       const [projects, leads, editors] = await Promise.all([
-        supabaseRequest('/jobs?select=*,client:client_id(name),editor:editor_id(name)&order=id.desc'),
+        supabaseRequest('/jobs?select=*,client:client_id(name),editor:editor_id(name)&status=neq.Deleted&order=id.desc'),
         supabaseRequest('/users?role=eq.client&order=name.asc'),
         supabaseRequest('/users?role=eq.editor&order=name.asc')
       ]);
@@ -386,7 +386,10 @@ function renderProjects(items, clientMap, editorMap){
       if (confirm('Tem certeza que deseja excluir este projeto?')) {
         try {
           if(SUPABASE_URL && SUPABASE_KEY){
-            await supabaseRequest(`/jobs?id=eq.${id}`, { method: 'DELETE' });
+            await supabaseRequest(`/jobs?id=eq.${id}`, {
+              method: 'PATCH',
+              body: JSON.stringify({ status: 'Deleted' })
+            });
           } else {
             await fetch(`${API_URL}/jobs/${id}`, { method: 'DELETE' });
           }

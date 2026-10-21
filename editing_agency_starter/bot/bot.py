@@ -1,5 +1,14 @@
 import os
 import sys
+
+# Garante suporte a UTF-8 no terminal Windows para emojis
+if sys.platform == 'win32':
+    try:
+        sys.stdout.reconfigure(encoding='utf-8')
+        sys.stderr.reconfigure(encoding='utf-8')
+    except Exception:
+        pass
+
 from dotenv import load_dotenv
 
 # Carrega o .env antes de importar qualquer modulo de banco
@@ -147,24 +156,47 @@ async def check_jobs():
         deleted_jobs = db.query(Job).filter(Job.status == "Deleted").all()
         for job in deleted_jobs:
             print(f"[BOT] Deleting channels for job #{job.id}...")
-            # Look for channels
+            category = None
             chat_channel = discord.utils.get(guild.channels, name=f"📋・job-{job.id}")
-            if chat_channel:
-                await chat_channel.delete()
-                
             files_channel = discord.utils.get(guild.channels, name=f"📦・files-{job.id}")
+            
             if files_channel:
-                # Store category reference before deleting the last channel
                 category = files_channel.category
                 await files_channel.delete()
+            if chat_channel:
+                if not category:
+                    category = chat_channel.category
+                await chat_channel.delete()
                 
-                # If category is now empty (or only has other jobs), we can delete it. 
-                # For safety, let's only delete the category if it has no channels left.
-                if category and len(category.channels) == 0:
+            # If category is now empty, delete it
+            if category and len(category.channels) == 0:
+                try:
                     await category.delete()
+                except Exception as cat_err:
+                    print(f"[BOT] Could not delete empty category: {cat_err}")
                     
             db.delete(job)
             db.commit()
+
+        # Handle orphan channels (whose jobs were deleted directly from database or site)
+        existing_jobs = db.query(Job.id).filter(Job.status != "Deleted").all()
+        existing_job_ids = {j.id for j in existing_jobs}
+        for ch in list(guild.text_channels):
+            name = ch.name
+            if name.startswith("📋・job-") or name.startswith("📦・files-"):
+                try:
+                    ch_job_id = int(name.split("-")[1])
+                    if ch_job_id not in existing_job_ids:
+                        print(f"[BOT] Found orphan channel {name} (Job #{ch_job_id} no longer in DB). Deleting...")
+                        cat = ch.category
+                        await ch.delete()
+                        if cat and len(cat.channels) == 0:
+                            try:
+                                await cat.delete()
+                            except Exception:
+                                pass
+                except Exception as orphan_err:
+                    print(f"[BOT] Error cleaning orphan channel {name}: {orphan_err}")
 
     except Exception as e:
         print("Error checking jobs:", e)
