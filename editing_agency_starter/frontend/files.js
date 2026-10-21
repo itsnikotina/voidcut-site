@@ -59,7 +59,7 @@ async function validateAndLoad() {
     }
   }
 
-  // 2. Carrega arquivos (via API local se configurada ou exibe fallback do Drive)
+  // 2. Carrega arquivos (se houver API remota configurada tenta carregar, senao exibe modo nuvem)
   await loadFiles();
 }
 
@@ -94,52 +94,81 @@ async function loadFiles() {
   const listEl = document.getElementById('fileList');
   if (!listEl) return;
 
-  try {
-    const res = await fetch(`${API_URL}/api/files?job_id=${jobId}&token=${token}`);
-    if (!res.ok) throw new Error('API offline');
-    const data = await res.json();
-    const files = data.files || [];
-    const projectName = data.project_name || (currentJob ? currentJob.title : `JOB #${jobId}`);
-    
-    document.getElementById('jobIdLabel').textContent = projectName;
-    
-    const totalBytes = files.reduce((acc, f) => acc + (parseInt(f.size) || 0), 0);
+  const projectName = currentJob ? currentJob.title : `JOB #${jobId}`;
+  const label = document.getElementById('jobIdLabel');
+  if (label) label.textContent = projectName;
+
+  const folderId = currentJob ? currentJob.drive_folder_id : null;
+  const driveUrl = folderId ? `https://drive.google.com/drive/folders/${folderId}` : null;
+
+  // Se a API remota estiver configurada com URL completa (ex: http:// ou https://)
+  if (API_URL && API_URL.startsWith('http')) {
+    try {
+      const res = await fetch(`${API_URL}/api/files?job_id=${jobId}&token=${token}`);
+      if (res.ok) {
+        const data = await res.json();
+        const files = data.files || [];
+        const totalBytes = files.reduce((acc, f) => acc + (parseInt(f.size) || 0), 0);
+        const statsEl = document.getElementById('folderStats');
+        if (statsEl) statsEl.textContent = `${files.length} file${files.length === 1 ? '' : 's'} • ${formatBytes(totalBytes)} / 100 GB`;
+        
+        if (files.length === 0) {
+          listEl.innerHTML = '<div style="padding: 20px; text-align: center; color: #777;">No files uploaded yet in this project.</div>';
+          return;
+        }
+        
+        listEl.innerHTML = files.map(f => `
+          <div class="file-item">
+            <div class="file-info">
+              <span class="file-name">${esc(f.name)}</span>
+              <span class="file-size">${formatBytes(f.size || 0)}</span>
+            </div>
+            <div class="file-actions">
+              ${f.webContentLink ? `<a href="${esc(f.webContentLink)}" target="_blank" rel="noopener noreferrer" class="ghost-btn" style="background: var(--acid); color: #0b0b0b; border-color: var(--acid); font-weight: 500;">Download</a>` : ''}
+              <button class="ghost-btn" style="color: var(--red); display: inline-flex; align-items: center; justify-content: center; padding: 7px; min-width: 34px;" onmouseover="this.style.borderColor='var(--red)'" onmouseout="this.style.borderColor='var(--line)'" onclick="deleteFile('${esc(f.id)}')" title="Delete file">
+                <svg width="16" height="16" fill="none" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M16 2v4h6v2h-2v14H4V8H2V6h6V2h8zm-2 2h-4v2h4V4zm0 4H6v12h12V8h-4zm-5 2h2v8H9v-8zm6 0h-2v8h2v-8z" fill="currentColor"/></svg>
+              </button>
+            </div>
+          </div>
+        `).join('');
+        return;
+      }
+    } catch (e) {
+      console.log('Backend API offline, displaying Google Drive cloud portal.');
+    }
+  }
+
+  // Modo Cloud Nativo (Vercel + Google Drive):
+  if (driveUrl) {
     const statsEl = document.getElementById('folderStats');
-    if (statsEl) statsEl.textContent = `${files.length} file${files.length === 1 ? '' : 's'} • ${formatBytes(totalBytes)} / 100 GB`;
-    
-    if (files.length === 0) {
-      listEl.innerHTML = '<div style="padding: 20px; text-align: center; color: #777;">No files uploaded yet in this project.</div>';
-      return;
-    }
-    
-    listEl.innerHTML = files.map(f => `
-      <div class="file-item">
-        <div class="file-info">
-          <span class="file-name">${esc(f.name)}</span>
-          <span class="file-size">${formatBytes(f.size || 0)}</span>
+    if (statsEl) statsEl.textContent = 'GOOGLE DRIVE CLOUD SYNC';
+
+    listEl.innerHTML = `
+      <div style="padding: 35px 20px; text-align: center; background: #0e0e0e; border: 1px solid var(--line); border-radius: 6px;">
+        <div style="width: 48px; height: 48px; border-radius: 50%; background: rgba(168,255,62,0.1); border: 1px solid var(--acid); display: flex; align-items: center; justify-content: center; margin: 0 auto 16px; color: var(--acid); font-size: 20px;">
+          ☁️
         </div>
-        <div class="file-actions">
-          ${f.webContentLink ? `<a href="${esc(f.webContentLink)}" target="_blank" rel="noopener noreferrer" class="ghost-btn" style="background: var(--acid); color: #0b0b0b; border-color: var(--acid); font-weight: 500;">Download</a>` : ''}
-          <button class="ghost-btn" style="color: var(--red); display: inline-flex; align-items: center; justify-content: center; padding: 7px; min-width: 34px;" onmouseover="this.style.borderColor='var(--red)'" onmouseout="this.style.borderColor='var(--line)'" onclick="deleteFile('${esc(f.id)}')" title="Delete file">
-            <svg width="16" height="16" fill="none" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M16 2v4h6v2h-2v14H4V8H2V6h6V2h8zm-2 2h-4v2h4V4zm0 4H6v12h12V8h-4zm-5 2h2v8H9v-8zm6 0h-2v8h2v-8z" fill="currentColor"/></svg>
-          </button>
-        </div>
+        <h3 style="color: #fff; font-size: 18px; margin: 0 0 8px; letter-spacing: -0.02em;">Pasta Oficial do Projeto no Google Drive</h3>
+        <p style="color: #888; font-size: 13px; max-width: 480px; margin: 0 auto 20px; line-height: 1.5;">
+          Os vídeos brutos (raw footage) e os renders finais deste trabalho são armazenados e sincronizados com segurança no Google Drive da agência.
+        </p>
+        <a href="${driveUrl}" target="_blank" rel="noopener noreferrer" class="button primary" style="text-decoration: none; display: inline-flex; padding: 14px 24px; font-size: 12px; font-weight: 600;">
+          Abrir Pasta no Google Drive ↗
+        </a>
       </div>
-    `).join('');
-  } catch (err) {
-    if (currentJob && currentJob.drive_folder_id) {
-      const driveUrl = `https://drive.google.com/drive/folders/${currentJob.drive_folder_id}`;
-      listEl.innerHTML = `
-        <div style="padding: 30px 20px; text-align: center; color: #888;">
-          <p style="color: #eee; font-size: 14px; margin-bottom: 12px;">Os arquivos deste projeto são sincronizados diretamente na nuvem.</p>
-          <a href="${driveUrl}" target="_blank" rel="noopener noreferrer" class="button primary" style="text-decoration: none; display: inline-flex; padding: 12px 20px;">
-            Acessar Arquivos no Google Drive ↗
-          </a>
-        </div>
-      `;
-    } else {
-      listEl.innerHTML = `<div style="padding: 20px; text-align: center; color: var(--red);">Pasta do projeto em preparação. Aguarde alguns instantes.</div>`;
+    `;
+
+    // Dropzone direciona para o Drive também:
+    const dropzone = document.getElementById('dropzone');
+    if (dropzone && (!API_URL || !API_URL.startsWith('http'))) {
+      dropzone.onclick = () => window.open(driveUrl, '_blank');
+      const h3 = dropzone.querySelector('h3');
+      const p = dropzone.querySelector('p');
+      if (h3) h3.textContent = 'Clique para abrir o Google Drive';
+      if (p) p.textContent = 'Envie e baixe arquivos de qualquer tamanho diretamente na pasta';
     }
+  } else {
+    listEl.innerHTML = `<div style="padding: 25px; text-align: center; color: #777;">Pasta em preparação pelo sistema. Recarregue em alguns segundos.</div>`;
   }
 }
 
@@ -157,6 +186,12 @@ function showError(msg) {
 
 async function deleteFile(fileId) {
   if (!confirm('Are you sure you want to delete this file?')) return;
+  if (!API_URL || !API_URL.startsWith('http')) {
+    if (currentJob && currentJob.drive_folder_id) {
+      window.open(`https://drive.google.com/drive/folders/${currentJob.drive_folder_id}`, '_blank');
+    }
+    return;
+  }
   try {
     const res = await fetch(`${API_URL}/api/files/${fileId}?job_id=${jobId}&token=${token}`, { method: 'DELETE' });
     if (res.ok) {
@@ -174,8 +209,6 @@ const dropzone = document.getElementById('dropzone');
 const fileInput = document.getElementById('fileInput');
 
 if (dropzone && fileInput) {
-  dropzone.addEventListener('click', () => fileInput.click());
-
   dropzone.addEventListener('dragover', (e) => {
     e.preventDefault();
     dropzone.classList.add('dragover');
@@ -188,13 +221,15 @@ if (dropzone && fileInput) {
   dropzone.addEventListener('drop', (e) => {
     e.preventDefault();
     dropzone.classList.remove('dragover');
-    if (e.dataTransfer.files.length) {
+    if (API_URL && API_URL.startsWith('http') && e.dataTransfer.files.length) {
       handleUpload(e.dataTransfer.files);
+    } else if (currentJob && currentJob.drive_folder_id) {
+      window.open(`https://drive.google.com/drive/folders/${currentJob.drive_folder_id}`, '_blank');
     }
   });
 
   fileInput.addEventListener('change', () => {
-    if (fileInput.files.length) {
+    if (API_URL && API_URL.startsWith('http') && fileInput.files.length) {
       handleUpload(fileInput.files);
     }
   });
@@ -272,6 +307,13 @@ function uploadChunk(uploadUrl, chunk, start, end, totalSize, progressBar, progr
 }
 
 async function handleUpload(files) {
+    if (!API_URL || !API_URL.startsWith('http')) {
+        if (currentJob && currentJob.drive_folder_id) {
+            window.open(`https://drive.google.com/drive/folders/${currentJob.drive_folder_id}`, '_blank');
+        }
+        return;
+    }
+
     const progressCont = document.getElementById('progressContainer');
     const progressBar = document.getElementById('uploadProgress');
     const progressText = document.getElementById('progressText');
