@@ -1,53 +1,149 @@
 const urlParams = new URLSearchParams(window.location.search);
 const jobId = urlParams.get('job_id');
 const token = urlParams.get('token');
-const API_URL = ''; // Relative to same host
+
+let API_URL = '';
+let SUPABASE_URL = '';
+let SUPABASE_KEY = '';
+let currentJob = null;
+
+async function loadConfig() {
+  try {
+    const res = await fetch('config.json');
+    if (res.ok) {
+      const cfg = await res.json();
+      if (cfg.api_url) API_URL = cfg.api_url.replace(/\/$/, '');
+      if (cfg.supabase_url) SUPABASE_URL = cfg.supabase_url.replace(/\/$/, '');
+      if (cfg.supabase_key) SUPABASE_KEY = cfg.supabase_key;
+    }
+  } catch (e) {
+    console.warn('config.json could not be loaded, using defaults.');
+  }
+}
 
 if (!jobId || !token) {
-  document.body.innerHTML = '<h1 style="color:white;text-align:center;margin-top:100px;">403 Forbidden: Invalid secure link.</h1>';
+  document.body.innerHTML = '<h1 style="color:white;text-align:center;margin-top:100px;font-family:sans-serif;">403 Forbidden: Invalid secure link.</h1>';
 } else {
-  document.getElementById('jobIdLabel').textContent = `LOADING...`;
-  loadFiles();
+  document.addEventListener('DOMContentLoaded', async () => {
+    const label = document.getElementById('jobIdLabel');
+    if (label) label.textContent = 'VALIDATING...';
+    await loadConfig();
+    await validateAndLoad();
+  });
+}
+
+async function validateAndLoad() {
+  // 1. Valida o Job e Token via Supabase
+  if (SUPABASE_URL && SUPABASE_KEY) {
+    try {
+      const res = await fetch(`${SUPABASE_URL}/rest/v1/jobs?id=eq.${jobId}&access_token=eq.${token}&select=id,title,access_token,drive_folder_id`, {
+        headers: {
+          'apikey': SUPABASE_KEY,
+          'Authorization': `Bearer ${SUPABASE_KEY}`
+        }
+      });
+      if (res.ok) {
+        const jobs = await res.json();
+        if (jobs && jobs.length > 0) {
+          currentJob = jobs[0];
+          const label = document.getElementById('jobIdLabel');
+          if (label) label.textContent = currentJob.title || `JOB #${jobId}`;
+          renderDriveBanner(currentJob.drive_folder_id);
+        } else {
+          document.body.innerHTML = '<h1 style="color:white;text-align:center;margin-top:100px;font-family:sans-serif;">403 Forbidden: Invalid secure link.</h1>';
+          return;
+        }
+      }
+    } catch (e) {
+      console.error('Error validating with Supabase:', e);
+    }
+  }
+
+  // 2. Carrega arquivos (via API local se configurada ou exibe fallback do Drive)
+  await loadFiles();
+}
+
+function renderDriveBanner(folderId) {
+  if (!folderId) return;
+  const existing = document.getElementById('driveDirectBanner');
+  if (existing) return;
+
+  const driveUrl = `https://drive.google.com/drive/folders/${folderId}`;
+  const banner = document.createElement('div');
+  banner.id = 'driveDirectBanner';
+  banner.style.cssText = 'margin-bottom: 25px; padding: 20px; background: #121212; border: 1px solid var(--acid); border-radius: 6px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 15px;';
+  banner.innerHTML = `
+    <div>
+      <div style="font: 500 11px 'DM Mono'; color: var(--acid); margin-bottom: 4px; text-transform: uppercase;">Google Drive Cloud Sync</div>
+      <b style="color: #fff; font-size: 15px; letter-spacing: -0.01em;">Pasta de Arquivos do Projeto</b>
+      <p style="color: #888; font-size: 12px; margin: 4px 0 0;">Envie vídeos brutos e baixe os renders finais direto pelo Google Drive oficial.</p>
+    </div>
+    <a href="${driveUrl}" target="_blank" rel="noopener noreferrer" class="button primary" style="text-decoration: none; padding: 10px 16px; font-size: 11px;">
+      Abrir no Google Drive ↗
+    </a>
+  `;
+
+  const container = document.querySelector('.files-container');
+  const dropzone = document.getElementById('dropzone');
+  if (container && dropzone) {
+    container.insertBefore(banner, dropzone);
+  }
 }
 
 async function loadFiles() {
   const listEl = document.getElementById('fileList');
+  if (!listEl) return;
+
   try {
     const res = await fetch(`${API_URL}/api/files?job_id=${jobId}&token=${token}`);
-    if (!res.ok) throw new Error('Unauthorized or folder not ready');
+    if (!res.ok) throw new Error('API offline');
     const data = await res.json();
     const files = data.files || [];
-    const projectName = data.project_name || `JOB #${jobId}`;
+    const projectName = data.project_name || (currentJob ? currentJob.title : `JOB #${jobId}`);
     
     document.getElementById('jobIdLabel').textContent = projectName;
     
     const totalBytes = files.reduce((acc, f) => acc + (parseInt(f.size) || 0), 0);
     const statsEl = document.getElementById('folderStats');
-    if(statsEl) statsEl.textContent = `${files.length} file${files.length === 1 ? '' : 's'} • ${formatBytes(totalBytes)} / 100 GB`;
+    if (statsEl) statsEl.textContent = `${files.length} file${files.length === 1 ? '' : 's'} • ${formatBytes(totalBytes)} / 100 GB`;
     
     if (files.length === 0) {
-      listEl.innerHTML = '<div style="padding: 20px; text-align: center; color: #777;">No files uploaded yet.</div>';
+      listEl.innerHTML = '<div style="padding: 20px; text-align: center; color: #777;">No files uploaded yet in this project.</div>';
       return;
     }
     
     listEl.innerHTML = files.map(f => `
       <div class="file-item">
         <div class="file-info">
-          <span class="file-name">${f.name}</span>
+          <span class="file-name">${esc(f.name)}</span>
           <span class="file-size">${formatBytes(f.size || 0)}</span>
         </div>
         <div class="file-actions">
-          ${f.webContentLink ? `<a href="${f.webContentLink}" target="_blank" class="ghost-btn" style="background: var(--acid); color: #0b0b0b; border-color: var(--acid); font-weight: 500;">Download</a>` : ''}
-          <button class="ghost-btn" style="color: var(--red); display: inline-flex; align-items: center; justify-content: center; padding: 7px; min-width: 34px;" onmouseover="this.style.borderColor='var(--red)'" onmouseout="this.style.borderColor='var(--line)'" onclick="deleteFile('${f.id}')" title="Delete file">
+          ${f.webContentLink ? `<a href="${esc(f.webContentLink)}" target="_blank" rel="noopener noreferrer" class="ghost-btn" style="background: var(--acid); color: #0b0b0b; border-color: var(--acid); font-weight: 500;">Download</a>` : ''}
+          <button class="ghost-btn" style="color: var(--red); display: inline-flex; align-items: center; justify-content: center; padding: 7px; min-width: 34px;" onmouseover="this.style.borderColor='var(--red)'" onmouseout="this.style.borderColor='var(--line)'" onclick="deleteFile('${esc(f.id)}')" title="Delete file">
             <svg width="16" height="16" fill="none" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M16 2v4h6v2h-2v14H4V8H2V6h6V2h8zm-2 2h-4v2h4V4zm0 4H6v12h12V8h-4zm-5 2h2v8H9v-8zm6 0h-2v8h2v-8z" fill="currentColor"/></svg>
           </button>
         </div>
       </div>
     `).join('');
   } catch (err) {
-    listEl.innerHTML = `<div style="padding: 20px; text-align: center; color: #f44336;">Error: ${err.message}</div>`;
+    if (currentJob && currentJob.drive_folder_id) {
+      const driveUrl = `https://drive.google.com/drive/folders/${currentJob.drive_folder_id}`;
+      listEl.innerHTML = `
+        <div style="padding: 30px 20px; text-align: center; color: #888;">
+          <p style="color: #eee; font-size: 14px; margin-bottom: 12px;">Os arquivos deste projeto são sincronizados diretamente na nuvem.</p>
+          <a href="${driveUrl}" target="_blank" rel="noopener noreferrer" class="button primary" style="text-decoration: none; display: inline-flex; padding: 12px 20px;">
+            Acessar Arquivos no Google Drive ↗
+          </a>
+        </div>
+      `;
+    } else {
+      listEl.innerHTML = `<div style="padding: 20px; text-align: center; color: var(--red);">Pasta do projeto em preparação. Aguarde alguns instantes.</div>`;
+    }
   }
 }
+
+function esc(s){return String(s??'').replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[m]))}
 
 function showError(msg) {
   const modal = document.getElementById('errorModal');
@@ -77,30 +173,32 @@ async function deleteFile(fileId) {
 const dropzone = document.getElementById('dropzone');
 const fileInput = document.getElementById('fileInput');
 
-dropzone.addEventListener('click', () => fileInput.click());
+if (dropzone && fileInput) {
+  dropzone.addEventListener('click', () => fileInput.click());
 
-dropzone.addEventListener('dragover', (e) => {
-  e.preventDefault();
-  dropzone.classList.add('dragover');
-});
+  dropzone.addEventListener('dragover', (e) => {
+    e.preventDefault();
+    dropzone.classList.add('dragover');
+  });
 
-dropzone.addEventListener('dragleave', () => {
-  dropzone.classList.remove('dragover');
-});
+  dropzone.addEventListener('dragleave', () => {
+    dropzone.classList.remove('dragover');
+  });
 
-dropzone.addEventListener('drop', (e) => {
-  e.preventDefault();
-  dropzone.classList.remove('dragover');
-  if (e.dataTransfer.files.length) {
-    handleUpload(e.dataTransfer.files);
-  }
-});
+  dropzone.addEventListener('drop', (e) => {
+    e.preventDefault();
+    dropzone.classList.remove('dragover');
+    if (e.dataTransfer.files.length) {
+      handleUpload(e.dataTransfer.files);
+    }
+  });
 
-fileInput.addEventListener('change', () => {
-  if (fileInput.files.length) {
-    handleUpload(fileInput.files);
-  }
-});
+  fileInput.addEventListener('change', () => {
+    if (fileInput.files.length) {
+      handleUpload(fileInput.files);
+    }
+  });
+}
 
 function formatBytes(bytes, decimals = 2) {
   if (!+bytes) return '0 Bytes';
@@ -179,13 +277,13 @@ async function handleUpload(files) {
     const progressText = document.getElementById('progressText');
     const progressPercent = document.getElementById('progressPercent');
     
-    progressCont.style.display = 'block';
+    if (progressCont) progressCont.style.display = 'block';
     
     for (let i = 0; i < files.length; i++) {
         const file = files[i];
-        progressText.textContent = `Uploading ${file.name}... (${i+1}/${files.length})`;
-        progressBar.value = 0;
-        progressPercent.textContent = '0%';
+        if (progressText) progressText.textContent = `Uploading ${file.name}... (${i+1}/${files.length})`;
+        if (progressBar) progressBar.value = 0;
+        if (progressPercent) progressPercent.textContent = '0%';
         
         try {
             const uploadUrl = await createUploadSession(file);
@@ -203,7 +301,7 @@ async function handleUpload(files) {
         }
     }
     
-    progressCont.style.display = 'none';
-    fileInput.value = ''; // Reset
+    if (progressCont) progressCont.style.display = 'none';
+    if (fileInput) fileInput.value = '';
     loadFiles();
 }

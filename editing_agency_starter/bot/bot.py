@@ -130,7 +130,8 @@ async def check_jobs():
                     
                 if job.access_token:
                     magic_link = f"{site_url}/files.html?job_id={job.id}&token={job.access_token}"
-                    await files_channel.send(f"📂 **Project Files Portal:**\nAccess the raw footage and upload your final render here:\n{magic_link}")
+                    drive_msg = f"\n☁️ **Google Drive:** https://drive.google.com/drive/folders/{job.drive_folder_id}" if job.drive_folder_id else ""
+                    await files_channel.send(f"📂 **Project Files Portal:**\nAccess the raw footage and upload your final render here:\n{magic_link}{drive_msg}")
             
             # Send log to owners
             if LOG_CHANNEL_ID:
@@ -301,7 +302,8 @@ class JobDetailsModal(discord.ui.Modal, title='Finalize Job Details'):
                 pass
             
             magic_link = f"{site_url}/files.html?job_id={new_job.id}&token={token}"
-            await interaction.channel.send(f"📂 **Project Files Portal:**\nPlease access your private portal to upload/download project files:\n{magic_link}")
+            drive_msg = f"\n☁️ **Google Drive:** https://drive.google.com/drive/folders/{folder_id}" if folder_id else ""
+            await interaction.channel.send(f"📂 **Project Files Portal:**\nPlease access your private portal to upload/download project files:\n{magic_link}{drive_msg}")
         finally:
             db.close()
 
