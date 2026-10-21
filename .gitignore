@@ -1,0 +1,50 @@
+# ============================================================
+# VOIDCUT - Git Ignore (Security & Build Artifacts)
+# ============================================================
+
+# Environment variables & secrets (CRITICAL)
+.env
+.env.*
+!.env.example
+*.env
+client_secret*.json
+credentials*.json
+token*.json
+
+# Databases & local storage
+*.db
+*.sqlite
+*.sqlite3
+agency.db
+
+# Executables & binary tools
+*.exe
+cloudflared*
+
+# Virtual environments
+venv/
+.venv/
+env/
+ENV/
+
+# Python cache & compiled files
+__pycache__/
+*/__pycache__/
+*/*/__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+dist/
+build/
+
+# Temporary / local runtime files
+gptresponse/
+site_url.txt
+*.log
+
+# OS & IDE metadata
+.DS_Store
+Thumbs.db
+desktop.ini
+.vscode/
+.idea/

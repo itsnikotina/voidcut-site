@@ -1,0 +1,107 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>VOIDCUT — Team Dashboard</title>
+<link rel="icon" type="image/x-icon" href="kittyyyy.ico">
+<link rel="shortcut icon" href="kittyyyy.ico">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body class="dashboard-page">
+<header class="nav">
+  <a class="brand" href="index.html">
+    <img src="LOGOarredondada.png" alt="VOIDCUT" style="width:34px;height:34px;object-fit:contain;border-radius:6px;"> VOIDCUT
+  </a>
+  <div class="dash-user">
+    <span class="badge-internal">INTERNAL / CONTROL ROOM</span>
+    <span id="dashDate"></span>
+    <button id="logoutBtn" class="ghost-btn">Log out</button>
+  </div>
+</header>
+
+<main class="dashboard">
+  <div class="dash-title">
+    <div>
+      <span class="eyebrow">AGENCY MANAGEMENT</span>
+      <h1>TEAM DASHBOARD</h1>
+      <p class="dash-subtitle">Acompanhamento de produções, editores, entregas e faturamento em tempo real.</p>
+    </div>
+    <div class="dash-actions">
+      <button id="addProject" class="button primary">+ Novo Projeto</button>
+    </div>
+  </div>
+
+  <section class="stats">
+    <div>
+      <span>PROJETOS ATIVOS</span>
+      <b id="statProjects">0</b>
+      <small id="statProjectsSub">Em andamento</small>
+    </div>
+    <div>
+      <span>AGUARDANDO REVISÃO</span>
+      <b id="statReview" style="color: #ffb84d;">0</b>
+      <small>Prontos para aprovar</small>
+    </div>
+    <div>
+      <span>BANCO DE EDITORES</span>
+      <b id="statEditors">0</b>
+      <small id="statEditorsSub">Equipe cadastrada</small>
+    </div>
+    <div>
+      <span>VALOR EM PRODUÇÃO</span>
+      <b id="statValue" style="color: var(--acid);">$0</b>
+      <small id="statMarginSub">Margem estimada: $0</small>
+    </div>
+  </section>
+
+  <!-- PAINEL PRINCIPAL DE PROJETOS -->
+  <section class="panel panel-projects">
+    <div class="panel-head">
+      <div class="panel-head-title">
+        <h2>PROJETOS EM PRODUÇÃO</h2>
+        <span id="projectsCount" class="badge-count">0 trabalhos</span>
+      </div>
+      <div class="panel-head-actions">
+        <button id="refreshBtn" class="ghost-btn" style="font-size:10px; padding:6px 10px; font-family:'DM Mono';">↻ ATUALIZAR</button>
+      </div>
+    </div>
+    <div id="projectList"></div>
+  </section>
+
+  <!-- GRID SECUNDÁRIO: CLIENTES E EDITORES -->
+  <section class="dash-grid-secondary">
+    <div class="panel">
+      <div class="panel-head">
+        <div class="panel-head-title">
+          <h2>BASE DE CLIENTES</h2>
+          <span id="clientsCount" class="badge-count">0</span>
+        </div>
+      </div>
+      <div id="leadList" class="rows"></div>
+    </div>
+    <div class="panel">
+      <div class="panel-head">
+        <div class="panel-head-title">
+          <h2>BANCO DE EDITORES</h2>
+          <span id="editorsCount" class="badge-count">0</span>
+        </div>
+      </div>
+      <div id="editorList" class="rows"></div>
+    </div>
+  </section>
+</main>
+
+<div id="dashModal" class="modal hidden">
+  <div class="modal-box" style="max-width:540px;">
+    <button class="close" data-close>×</button>
+    <span class="eyebrow" id="modalEyebrow">NOVO ITEM</span>
+    <h2 id="modalTitle" style="font-size:32px; margin: 10px 0 20px;">NOVO PROJETO</h2>
+    <div id="modalFields"></div>
+    <button id="modalSave" class="button primary" style="margin-top:20px;">Salvar Projeto</button>
+  </div>
+</div>
+
+<script src="app.js"></script>
+</body>
+</html>

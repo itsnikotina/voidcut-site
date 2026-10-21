@@ -1,0 +1,39 @@
+# Environment variables & secrets (CRITICAL)
+.env
+.env.*
+!.env.example
+*.env
+client_secret*.json
+credentials*.json
+token*.json
+
+# Databases
+*.db
+*.sqlite
+*.sqlite3
+agency.db
+
+# Executables & binary tools
+*.exe
+cloudflared*
+
+# Virtual environments
+venv/
+.venv/
+env/
+ENV/
+
+# Python cache
+__pycache__/
+*.py[cod]
+
+# Temporary files
+gptresponse/
+site_url.txt
+*.log
+
+# OS & IDE
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/

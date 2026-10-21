@@ -1,0 +1,9 @@
+fastapi
+uvicorn
+discord.py
+sqlalchemy
+python-dotenv
+watchdog
+google-api-python-client
+google-auth-httplib2
+google-auth-oauthlib
