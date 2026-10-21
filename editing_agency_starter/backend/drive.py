@@ -7,8 +7,20 @@ import io
 
 SCOPES = ['https://www.googleapis.com/auth/drive']
 
+def _get_token_path():
+    # Look in the project root (editing_agency_starter/token.json)
+    root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    target = os.path.join(root, 'token.json')
+    if os.path.exists(target):
+        return target
+    # Fallback to local dir
+    if os.path.exists('token.json'):
+        return 'token.json'
+    return target
+
 def get_drive_service():
-    creds = Credentials.from_authorized_user_file('token.json', scopes=SCOPES)
+    token_path = _get_token_path()
+    creds = Credentials.from_authorized_user_file(token_path, scopes=SCOPES)
     return build('drive', 'v3', credentials=creds)
 
 def create_job_folder(job_name: str, root_folder_id: str) -> str:
@@ -28,7 +40,7 @@ def list_files(folder_id: str):
     return results.get('files', [])
 
 def create_upload_session(folder_id: str, filename: str, mime_type: str, file_size: int, origin: str) -> str:
-    creds = Credentials.from_authorized_user_file('token.json', scopes=SCOPES)
+    creds = Credentials.from_authorized_user_file(_get_token_path(), scopes=SCOPES)
     session = AuthorizedSession(creds)
     
     metadata = {
