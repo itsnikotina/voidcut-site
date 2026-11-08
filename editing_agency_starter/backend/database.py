@@ -12,14 +12,34 @@ from sqlalchemy import create_engine, Column, Integer, String, Float, ForeignKey
 from sqlalchemy.orm import declarative_base, sessionmaker, relationship
 from datetime import datetime
 
-DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./agency.db")
-if DATABASE_URL.startswith("postgres://"):
-    DATABASE_URL = DATABASE_URL.replace("postgres://", "postgresql+psycopg2://", 1)
-elif DATABASE_URL.startswith("postgresql://") and not DATABASE_URL.startswith("postgresql+"):
-    DATABASE_URL = DATABASE_URL.replace("postgresql://", "postgresql+psycopg2://", 1)
+_root_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+_sqlite_path = os.path.join(_root_dir, "agency.db")
+_sqlite_url = f"sqlite:///{_sqlite_path}"
 
-connect_args = {"check_same_thread": False} if DATABASE_URL.startswith("sqlite") else {}
-engine = create_engine(DATABASE_URL, connect_args=connect_args)
+def _create_app_engine():
+    raw_url = os.getenv("DATABASE_URL", _sqlite_url)
+    db_url = raw_url
+    if db_url.startswith("postgres://"):
+        db_url = db_url.replace("postgres://", "postgresql+psycopg2://", 1)
+    elif db_url.startswith("postgresql://") and not db_url.startswith("postgresql+"):
+        db_url = db_url.replace("postgresql://", "postgresql+psycopg2://", 1)
+
+    if db_url.startswith("postgresql"):
+        try:
+            test_engine = create_engine(db_url, connect_args={"connect_timeout": 3})
+            with test_engine.connect() as conn:
+                pass
+            print(f"[DATABASE] Conectado ao banco PostgreSQL remoto.")
+            return test_engine
+        except Exception as err:
+            print(f"[DATABASE] AVISO: Nao foi possivel conectar ao PostgreSQL remoto.")
+            print(f"[DATABASE] Motivo: {err}")
+            print(f"[DATABASE] Utilizando banco local SQLite: {_sqlite_path}")
+            return create_engine(_sqlite_url, connect_args={"check_same_thread": False})
+    
+    return create_engine(db_url, connect_args={"check_same_thread": False} if db_url.startswith("sqlite") else {})
+
+engine = _create_app_engine()
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()
 
